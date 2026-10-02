@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<title>タイムカード計算</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;background:#f3f4f6;color:#111827}
+header{background:#111827;color:#fff;padding:18px 16px 14px;position:sticky;top:0;z-index:10}
+h1{font-size:21px;margin:0 0 4px}.sub{font-size:12px;opacity:.72}
+main{max-width:720px;margin:auto;padding:12px 12px 40px}
+.tabs{display:flex;gap:7px;overflow-x:auto;padding:4px 0 10px;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:0 0 auto;border:1px solid #d1d5db;background:#fff;color:#374151;border-radius:10px;padding:9px 13px;font-weight:700}
+.tab.active{background:#111827;color:#fff;border-color:#111827}
+.addtab{flex:0 0 auto;border:0;background:#e5e7eb;border-radius:10px;padding:9px 13px;font-weight:700}
+.card{background:#fff;border-radius:16px;padding:15px;margin-bottom:12px;box-shadow:0 2px 12px #0000000b}
+.section-title{font-size:15px;font-weight:800;margin-bottom:10px}
+label{font-size:13px;font-weight:700;display:block;margin-bottom:6px}
+.name-row{display:flex;gap:8px}.name-row input{flex:1}
+input{font:inherit}
+.text-input,.wage-input{width:100%;padding:11px 12px;border:1px solid #d1d5db;border-radius:10px;background:#fff}
+.wage-wrap{display:flex;align-items:center;gap:8px}.wage-wrap .wage-input{max-width:180px}
+button{font:inherit;cursor:pointer;border:0}
+.primary{background:#111827;color:#fff;width:100%;border-radius:11px;padding:12px;font-weight:800;margin-top:9px}
+.secondary{background:#e5e7eb;color:#111827;border-radius:10px;padding:10px 13px;font-weight:700}
+.danger{background:#fee2e2;color:#991b1b;border-radius:10px;padding:9px 12px;font-weight:700}
+.file-help{font-size:12px;color:#6b7280;margin-top:6px}
+.preview{width:100%;max-height:420px;object-fit:contain;border-radius:10px;margin-top:10px;background:#111}
+.hidden{display:none}
+.status{font-size:12px;color:#4b5563;margin-top:8px;min-height:18px}.error{color:#b91c1c}.ok{color:#047857}
+.row{display:grid;grid-template-columns:48px 1fr 1fr 32px;gap:6px;align-items:center;margin:7px 0}
+.row input{width:100%;padding:9px 5px;border:1px solid #d1d5db;border-radius:9px;font-size:15px;text-align:center}
+.day{text-align:center;font-weight:700}.del{padding:8px;background:#fee2e2;color:#991b1b;border-radius:8px}
+.summary{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.result{background:#f9fafb;border-radius:12px;padding:12px;text-align:center}
+.result .label{font-size:12px;color:#6b7280;margin-bottom:4px}.result .value{font-size:23px;font-weight:900}
+.pay{background:#ecfdf5;border:1px solid #a7f3d0}
+.pay .value{font-size:28px}
+.small{font-size:11px;color:#6b7280;margin-top:5px;text-align:center}
+.empty{padding:16px;text-align:center;color:#6b7280;background:#f9fafb;border-radius:10px}
+</style>
+</head>
+<body>
+<header>
+  <h1>⏱ タイムカード計算</h1>
+  <div class="sub">個人ごとに勤務時間と給与を計算</div>
+</header>
+<main>
+  <div class="tabs" id="tabs"></div>
+
+  <section class="card">
+    <div class="section-title">👤 個人設定</div>
+    <label>名前</label>
+    <div class="name-row">
+      <input id="personName" class="text-input" placeholder="例：田中さん">
+      <button id="rename" class="secondary">名前を変更</button>
+    </div>
+    <div style="height:10px"></div>
+    <label>時給</label>
+    <div class="wage-wrap">
+      <input id="wage" class="wage-input" type="number" min="0" step="1" inputmode="numeric" placeholder="1200">
+      <span>円 / 時間</span>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="section-title">📷 タイムカード</div>
+    <label>写真ファイルを選択</label>
+    <input id="photo" type="file" accept="image/*,.jpg,.jpeg,.png,.heic">
+    <div class="file-help">「写真を撮る」ではなく、iPhoneの「ファイル」や写真ライブラリから選べます。</div>
+    <img id="preview" class="preview hidden">
+    <div id="status" class="status"></div>
+    <button id="ocr" class="primary" disabled>写真を読み取る</button>
+  </section>
+
+  <section class="card">
+    <div class="section-title">🕐 打刻時刻</div>
+    <div id="rows"></div>
+    <button id="add" class="secondary">＋ 行を追加</button>
+  </section>
+
+  <section class="card">
+    <div class="section-title">💰 計算結果</div>
+    <div class="summary">
+      <div class="result">
+        <div class="label">合計勤務時間</div>
+        <div id="totalTime" class="value">0時間00分</div>
+      </div>
+      <div class="result pay">
+        <div class="label">給与計算結果</div>
+        <div id="totalPay" class="value">¥0</div>
+      </div>
+    </div>
+    <div id="formula" class="small">時給 × 合計勤務時間で計算します。</div>
+  </section>
+
+  <section class="card">
+    <button id="deletePerson" class="danger" style="width:100%">この個人を削除</button>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script>
+const KEY="timecard_people_v2";
+let people=JSON.parse(localStorage.getItem(KEY)||"null") || [{
+  id:crypto.randomUUID(), name:"個人1", wage:0, rows:[]
+}];
+let currentId=people[0].id;
+
+const $=id=>document.getElementById(id);
+const current=()=>people.find(p=>p.id===currentId);
+const save=()=>localStorage.setItem(KEY,JSON.stringify(people));
+
+function renderTabs(){
+  $("tabs").innerHTML="";
+  people.forEach(p=>{
+    const b=document.createElement("button");
+    b.className="tab"+(p.id===currentId?" active":"");
+    b.textContent=p.name||"名前なし";
+    b.onclick=()=>{currentId=p.id;renderAll()};
+    $("tabs").appendChild(b);
+  });
+  const add=document.createElement("button");
+  add.className="addtab"; add.textContent="＋ 個人追加";
+  add.onclick=()=>{
+    const n=people.length+1;
+    const p={id:crypto.randomUUID(),name:"個人"+n,wage:0,rows:[]};
+    people.push(p);currentId=p.id;save();renderAll();
+  };
+  $("tabs").appendChild(add);
+}
+function renderSettings(){
+  const p=current();
+  $("personName").value=p.name||"";
+  $("wage").value=p.wage||"";
+}
+function addRow(day="",start="",end=""){
+  const d=document.createElement("div");d.className="row";
+  d.innerHTML=`<input class="day" placeholder="日" value="${day}">
+  <input class="start" placeholder="19:00" value="${start}">
+  <input class="end" placeholder="0:30" value="${end}">
+  <button class="del" title="削除">×</button>`;
+  d.querySelector(".del").onclick=()=>{d.remove();syncRows();calc()};
+  ["day","start","end"].forEach(c=>d.querySelector("."+c).addEventListener("input",()=>{syncRows();calc()}));
+  $("rows").appendChild(d);
+}
+function renderRows(){
+  $("rows").innerHTML="";
+  const rs=current().rows||[];
+  if(!rs.length){$("rows").innerHTML='<div class="empty">まだ打刻がありません。写真を読み取るか、行を追加してください。</div>';return}
+  rs.forEach(r=>addRow(r.day||"",r.start||"",r.end||""));
+}
+function syncRows(){
+  const p=current();p.rows=[...document.querySelectorAll("#rows .row")].map(r=>({
+    day:r.querySelector(".day").value,start:r.querySelector(".start").value,end:r.querySelector(".end").value
+  }));save();
+}
+function normalizeTime(s){
+  s=(s||"").replace(/[：]/g,":").replace(/\s/g,"").replace(/[Oo]/g,"0").replace(/[Il]/g,"1");
+  let m=s.match(/(\d{1,2})[:.](\d{2})/);
+  if(!m)m=s.match(/(\d{2})(\d{2})/);
+  if(!m)return null;
+  const h=+m[1],mi=+m[2]; if(h>23||mi>59)return null;
+  return String(h).padStart(2,"0")+":"+String(mi).padStart(2,"0");
+}
+function mins(t){const [h,m]=t.split(":").map(Number);return h*60+m}
+function calc(){
+  const p=current();p.wage=Number($("wage").value)||0;
+  let sum=0;
+  document.querySelectorAll("#rows .row").forEach(r=>{
+    const s=normalizeTime(r.querySelector(".start").value),e=normalizeTime(r.querySelector(".end").value);
+    if(!s||!e)return;
+    let a=mins(s),b=mins(e);if(b<a)b+=1440;
+    const v=b-a;if(v>=0)sum+=v;
+  });
+  $("totalTime").textContent=`${Math.floor(sum/60)}時間${String(sum%60).padStart(2,"0")}分`;
+  const pay=Math.round(p.wage*sum/60);
+  $("totalPay").textContent="¥"+pay.toLocaleString("ja-JP");
+  $("formula").textContent=`${p.wage.toLocaleString("ja-JP")}円 × ${(sum/60).toFixed(2)}時間 = ¥${pay.toLocaleString("ja-JP")}`;
+  save();
+}
+function renderAll(){renderTabs();renderSettings();renderRows();calc()}
+
+$("rename").onclick=()=>{
+  const p=current();const n=$("personName").value.trim();
+  if(n){p.name=n;save();renderTabs()}
+};
+$("wage").oninput=calc;
+$("add").onclick=()=>{if($("rows .empty"))$("rows").innerHTML="";addRow();syncRows();calc()};
+$("deletePerson").onclick=()=>{
+  if(people.length===1){alert("最後の1人は削除できません。");return}
+  const p=current();
+  if(confirm(`「${p.name}」を削除しますか？`)){
+    people=people.filter(x=>x.id!==p.id);currentId=people[0].id;save();renderAll();
+  }
+};
+
+const photo=$("photo"),preview=$("preview"),ocrBtn=$("ocr"),status=$("status");
+photo.addEventListener("change",()=>{
+  const f=photo.files?.[0];if(!f)return;
+  preview.src=URL.createObjectURL(f);preview.classList.remove("hidden");
+  ocrBtn.disabled=false;status.textContent="写真を選択しました。";
+});
+
+ocrBtn.onclick=async()=>{
+  const f=photo.files?.[0];if(!f)return;
+  ocrBtn.disabled=true;status.textContent="読み取り中…";
+  try{
+    const result=await Tesseract.recognize(f,"eng",{logger:m=>{
+      if(m.status==="recognizing text")status.textContent=`読み取り中… ${Math.round((m.progress||0)*100)}%`;
+    }});
+    const lines=result.data.text.split(/\n+/).map(x=>x.trim()).filter(Boolean);
+    const found=[];
+    for(const line of lines){
+      const ts=[...line.matchAll(/(?:^|\D)(\d{1,2})[:.](\d{2})(?!\d)/g)].map(m=>normalizeTime(`${m[1]}:${m[2]}`));
+      const ds=line.match(/(?:^|\D)(\d{1,2})(?:日)?\D/);
+      if(ts.length>=2)found.push({day:ds?ds[1]:"",start:ts[0],end:ts[1]});
+    }
+    current().rows=found;save();renderRows();calc();
+    status.innerHTML=found.length?'<span class="ok">読み取り完了。間違いがあれば修正してください。</span>':'<span class="error">自動認識できませんでした。下の行に入力してください。</span>';
+    if(!found.length)addRow();
+  }catch(e){
+    status.innerHTML='<span class="error">読み取りに失敗しました。手入力できます。</span>';
+    if(!current().rows.length)addRow();
+  }finally{ocrBtn.disabled=false}
+};
+
+renderAll();
+</script>
+</body>
+</html>
