@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<title>Sカード専用 タイムカード計算</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;background:#f3f4f6;color:#111827}
+header{background:#111827;color:white;padding:18px 16px;position:sticky;top:0;z-index:5}h1{font-size:21px;margin:0 0 4px}.sub{font-size:12px;opacity:.75}
+main{max-width:720px;margin:auto;padding:12px 12px 40px}.tabs{display:flex;gap:7px;overflow:auto;padding-bottom:10px}.tab,.addtab{border:0;border-radius:10px;padding:9px 13px;font-weight:700;white-space:nowrap}.tab{background:white}.tab.active{background:#111827;color:white}.addtab{background:#e5e7eb}
+.card{background:white;border-radius:16px;padding:15px;margin-bottom:12px;box-shadow:0 2px 12px #0000000b}.title{font-weight:800;margin-bottom:10px}
+input{font:inherit}.text,.wage{width:100%;padding:11px;border:1px solid #d1d5db;border-radius:10px}.row2{display:flex;gap:8px}.row2>*{flex:1}
+input[type=file]{width:100%;padding:10px;border:1px dashed #9ca3af;border-radius:10px;background:#f9fafb}
+.preview{width:100%;max-height:450px;object-fit:contain;background:#111;border-radius:10px;margin-top:10px}.hidden{display:none}
+button{font:inherit}.primary{width:100%;border:0;background:#111827;color:white;padding:13px;border-radius:11px;font-weight:800;margin-top:10px}.secondary{border:0;background:#e5e7eb;padding:10px 13px;border-radius:10px;font-weight:700}
+.status{font-size:12px;margin-top:8px;min-height:18px}.ok{color:#047857}.err{color:#b91c1c}
+.table{display:grid;grid-template-columns:45px 1fr 1fr 1fr;gap:6px;align-items:center}.head{font-size:12px;color:#6b7280;text-align:center;font-weight:700}.cell{width:100%;padding:9px 4px;border:1px solid #d1d5db;border-radius:9px;text-align:center;font-size:15px}.del{background:#fee2e2;color:#991b1b;border:0;border-radius:8px;padding:8px}
+.result{display:grid;grid-template-columns:1fr 1fr;gap:8px}.box{background:#f9fafb;border-radius:12px;padding:12px;text-align:center}.num{font-size:23px;font-weight:900}.pay{background:#ecfdf5;border:1px solid #a7f3d0}.hint{font-size:11px;color:#6b7280;text-align:center;margin-top:7px}
+</style>
+</head>
+<body>
+<header><h1>⏱ Sカード専用タイムカード計算</h1><div class="sub">このタイムカードの表を自動で読み取ります</div></header>
+<main>
+<div class="tabs" id="tabs"></div>
+
+<section class="card">
+<div class="title">👤 個人設定</div>
+<div class="row2"><input id="name" class="text" placeholder="名前"><input id="wage" class="wage" type="number" inputmode="numeric" min="0" placeholder="時給（円）"></div>
+</section>
+
+<section class="card">
+<div class="title">📷 Sカードを選択</div>
+<input id="file" type="file" accept="image/*,.jpg,.jpeg,.png,.heic">
+<div style="font-size:12px;color:#6b7280;margin-top:6px">写真を撮るボタンではなく、写真・ファイルから選択できます。</div>
+<img id="preview" class="preview hidden">
+<div id="status" class="status"></div>
+<button id="read" class="primary" disabled>このSカードを読み取る</button>
+</section>
+
+<section class="card">
+<div class="title">🕐 読み取り結果（修正できます）</div>
+<div class="table">
+<div class="head">日</div><div class="head">出勤</div><div class="head">退勤</div><div></div>
+</div>
+<div id="rows"></div>
+<button id="add" class="secondary" style="margin-top:10px">＋ 行を追加</button>
+</section>
+
+<section class="card">
+<div class="title">💰 計算結果</div>
+<div class="result">
+<div class="box"><div style="font-size:12px;color:#6b7280">合計勤務時間</div><div id="hours" class="num">0時間00分</div></div>
+<div class="box pay"><div style="font-size:12px;color:#047857">給与</div><div id="pay" class="num">¥0</div></div>
+</div>
+<div id="formula" class="hint">時給 × 合計勤務時間</div>
+</section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script>
+const STORE="s_card_timecard_v1";
+let people=JSON.parse(localStorage.getItem(STORE)||"null")||[{id:crypto.randomUUID(),name:"個人1",wage:0,rows:[]}];
+let pid=people[0].id;
+const $=id=>document.getElementById(id), person=()=>people.find(x=>x.id===pid);
+function save(){localStorage.setItem(STORE,JSON.stringify(people))}
+function tabs(){ $("tabs").innerHTML=""; people.forEach(p=>{let b=document.createElement("button");b.className="tab"+(p.id===pid?" active":"");b.textContent=p.name;b.onclick=()=>{pid=p.id;render()};$("tabs").appendChild(b)});let a=document.createElement("button");a.className="addtab";a.textContent="＋ 個人";a.onclick=()=>{let p={id:crypto.randomUUID(),name:"個人"+(people.length+1),wage:0,rows:[]};people.push(p);pid=p.id;save();render()};$("tabs").appendChild(a)}
+function render(){tabs();$("name").value=person().name;$("wage").value=person().wage||"";drawRows();calc()}
+function drawRows(){let box=$("rows");box.innerHTML="";(person().rows||[]).forEach(r=>addRow(r.day,r.start,r.end))}
+function addRow(day="",start="",end=""){let d=document.createElement("div");d.style.cssText="display:grid;grid-template-columns:45px 1fr 1fr 32px;gap:6px;margin-top:7px";d.innerHTML=`<input class="cell day" value="${day||""}" placeholder="3"><input class="cell st" value="${start||""}" placeholder="19:08"><input class="cell en" value="${end||""}" placeholder="23:07"><button class="del">×</button>`;d.querySelector(".del").onclick=()=>{d.remove();sync();calc()};d.querySelectorAll("input").forEach(x=>x.oninput=()=>{sync();calc()});$("rows").appendChild(d)}
+function sync(){person().rows=[...$("rows").children].map(r=>({day:r.querySelector(".day").value,start:r.querySelector(".st").value,end:r.querySelector(".en").value}));save()}
+function t(s){s=(s||"").replace(/[：.]/g,":").replace(/\s/g,"").replace(/[Oo]/g,"0").replace(/[Il]/g,"1");let m=s.match(/(\d{1,2}):?(\d{2})/);if(!m)return null;let h=+m[1],mi=+m[2];if(h>23||mi>59)return null;return String(h).padStart(2,"0")+":"+String(mi).padStart(2,"0")}
+function min(s){let [h,m]=s.split(":").map(Number);return h*60+m}
+function calc(){let sum=0;for(let r of person().rows){let a=t(r.start),b=t(r.end);if(a&&b){let x=min(a),y=min(b);if(y<x)y+=1440;sum+=y-x}}$("hours").textContent=Math.floor(sum/60)+"時間"+String(sum%60).padStart(2,"0")+"分";let w=+person().wage||0,pay=Math.round(w*sum/60);$("pay").textContent="¥"+pay.toLocaleString("ja-JP");$("formula").textContent=`${w.toLocaleString("ja-JP")}円 × ${(sum/60).toFixed(2)}時間 = ¥${pay.toLocaleString("ja-JP")}`;save()}
+$("name").oninput=()=>{person().name=$("name").value||"名前なし";save();tabs()};$("wage").oninput=calc;$("add").onclick=()=>{addRow();sync();calc()};
+
+const file=$("file"),preview=$("preview"),read=$("read"),status=$("status");
+file.onchange=()=>{let f=file.files?.[0];if(!f)return;preview.src=URL.createObjectURL(f);preview.classList.remove("hidden");read.disabled=false;status.textContent="写真を選択しました。"};
+function canvasFromImage(img){
+ const c=document.createElement("canvas"),ctx=c.getContext("2d");
+ // Sカードの表部分：このカード形式では画像の中央〜下側にある表を対象にする
+ const w=img.naturalWidth||img.width,h=img.naturalHeight||img.height;
+ const sx=Math.round(w*.075), sy=Math.round(h*.285), sw=Math.round(w*.62), sh=Math.round(h*.435);
+ c.width=sw*2;c.height=sh*2;
+ ctx.drawImage(img,sx,sy,sw,sh,0,0,c.width,c.height);
+ const d=ctx.getImageData(0,0,c.width,c.height),p=d.data;
+ // 明るさを上げ、薄い印字を強調
+ for(let i=0;i<p.length;i+=4){let g=.299*p[i]+.587*p[i+1]+.114*p[i+2];g=Math.max(0,Math.min(255,(g-145)*2.2+150));p[i]=p[i+1]=p[i+2]=g}
+ ctx.putImageData(d,0,0);return c
+}
+async function ocrCell(c,x,y,w,h){
+ const crop=document.createElement("canvas"),ctx=crop.getContext("2d");
+ crop.width=w*2;crop.height=h*2;ctx.drawImage(c,x,y,w,h,0,0,crop.width,crop.height);
+ const r=await Tesseract.recognize(crop,"eng",{config:{tessedit_char_whitelist:"0123456789:",tessedit_pageseg_mode:"7"}});
+ return r.data.text.trim()
+}
+read.onclick=async()=>{
+ const f=file.files?.[0];if(!f)return;read.disabled=true;status.textContent="Sカードの表を解析中…";
+ try{
+  const img=new Image();img.src=URL.createObjectURL(f);await new Promise((res,rej)=>{img.onload=res;img.onerror=rej});
+  const c=canvasFromImage(img);
+  // 6行の打刻欄を固定位置で読む。カードの行間を基準に、日・出勤・退勤を別々にOCR。
+  // 画像ごとの余白差に耐えるため、各セルを少し広めに切り出す。
+  const out=[];
+  const rowY=[.245,.315,.385,.525,.595,.665]; // Sカード前半の実データ行
+  for(let i=0;i<rowY.length;i++){
+    status.textContent=`${i+1}/6行目を読み取り中…`;
+    const y=Math.round(c.height*rowY[i]), rh=Math.round(c.height*.055);
+    const dayRaw=await ocrCell(c,Math.round(c.width*.00),y,Math.round(c.width*.22),rh);
+    const startRaw=await ocrCell(c,Math.round(c.width*.22),y,Math.round(c.width*.30),rh);
+    const endRaw=await ocrCell(c,Math.round(c.width*.51),y,Math.round(c.width*.43),rh);
+    const day=(dayRaw.match(/\d{1,2}/)||[""])[0];
+    const start=t(startRaw),end=t(endRaw);
+    if(day&& (start||end))out.push({day,start:start||"",end:end||""});
+  }
+  if(!out.length)throw new Error("no rows");
+  person().rows=out;save();drawRows();calc();status.innerHTML='<span class="ok">Sカード専用読み取りが完了しました。間違いがあれば修正してください。</span>';
+ }catch(e){status.innerHTML='<span class="err">読み取り位置を合わせられませんでした。写真を少し離してカード全体が入るように撮り直すか、下の行を修正してください。</span>';if(!person().rows.length)addRow()}
+ finally{read.disabled=false}
+};
+render();
+</script>
+</body>
+</html>
