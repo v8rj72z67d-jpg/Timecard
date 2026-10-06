@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<title>Sカード専用タイムカード【v8・反応確認＋安定OCR】</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f4f6;color:#111827;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif}
+header{background:#111827;color:#fff;padding:18px 16px;position:sticky;top:0;z-index:5}h1{font-size:21px;margin:0 0 4px}.sub{font-size:12px;opacity:.78}.ver{display:inline-block;font-size:12px;background:#2563eb;color:#fff;padding:3px 7px;border-radius:999px;vertical-align:middle;margin-left:5px}
+main{max-width:720px;margin:auto;padding:12px 12px 40px}.card{background:#fff;border-radius:16px;padding:15px;margin-bottom:12px;box-shadow:0 2px 12px #0000000b}
+.tabs{display:flex;gap:7px;overflow:auto;padding-bottom:10px}.tab,.addtab{border:0;border-radius:10px;padding:9px 13px;font-weight:700;white-space:nowrap}.tab{background:#fff}.tab.active{background:#111827;color:#fff}.addtab{background:#e5e7eb}
+.title{font-weight:800;margin-bottom:10px}input{font:inherit}.text,.wage{width:100%;padding:11px;border:1px solid #d1d5db;border-radius:10px}.two{display:flex;gap:8px}.two>*{flex:1}
+input[type=file]{width:100%;padding:10px;border:1px dashed #9ca3af;border-radius:10px;background:#f9fafb}
+.preview,.crop{width:100%;max-height:430px;object-fit:contain;background:#111;border-radius:10px;margin-top:10px}.crop{background:#f5ead8}.hidden{display:none}
+button{font:inherit}.primary{width:100%;border:0;background:#111827;color:#fff;padding:13px;border-radius:11px;font-weight:800;margin-top:10px}.secondary{border:0;background:#e5e7eb;padding:10px 13px;border-radius:10px;font-weight:700}
+.status{font-size:12px;margin-top:8px;min-height:18px}.ok{color:#047857}.err{color:#b91c1c}.note{font-size:12px;color:#6b7280;line-height:1.5}
+.controls{background:#f9fafb;border-radius:12px;padding:10px;margin-top:10px}.ctrl{display:grid;grid-template-columns:80px 1fr 42px;gap:7px;align-items:center;margin:7px 0;font-size:12px}.ctrl input{width:100%}.val{text-align:right;color:#374151}
+.grid{display:grid;grid-template-columns:45px 1fr 1fr 32px;gap:6px}.head{font-size:12px;color:#6b7280;text-align:center;font-weight:700}.cell{width:100%;padding:9px 4px;border:1px solid #d1d5db;border-radius:9px;text-align:center;font-size:15px}.del{background:#fee2e2;color:#991b1b;border:0;border-radius:8px;padding:8px}
+.results{display:grid;grid-template-columns:1fr 1fr;gap:8px}.box{background:#f9fafb;border-radius:12px;padding:12px;text-align:center}.num{font-size:23px;font-weight:900}.pay{background:#ecfdf5;border:1px solid #a7f3d0}.hint{font-size:11px;color:#6b7280;text-align:center;margin-top:7px}
+</style>
+</head>
+<body>
+<header><h1>⏱ Sカード専用タイムカード <span class="ver">v8</span></h1><div class="sub">ボタンを押すと即座に進捗を表示し、6行を順番に読み取ります</div></header>
+<main>
+<div id="tabs" class="tabs"></div>
+<section class="card">
+<div class="title">👤 個人設定</div>
+<div class="two"><input id="name" class="text" placeholder="名前"><input id="wage" class="wage" type="number" inputmode="numeric" min="0" placeholder="時給（円）"></div>
+</section>
+<section class="card">
+<div class="title">📷 タイムカード画像</div>
+<input id="file" type="file" accept="image/*,.jpg,.jpeg,.png,.heic">
+<div class="note">タイムカードを撮影した元写真を選択してください。今回は「表の上端・下端」を調整できるようにしました。</div>
+<img id="preview" class="preview hidden">
+<div id="controls" class="controls hidden">
+<div style="font-weight:800;margin-bottom:4px">🔧 読み取り範囲を調整</div>
+<div class="note">プレビューの下に表示される範囲が、表の「日付〜時間数」の部分になるように調整してください。</div>
+<div class="ctrl"><span>上</span><input id="top" type="range" min="5" max="55" value="24"><span id="topv" class="val">24%</span></div>
+<div class="ctrl"><span>下</span><input id="bottom" type="range" min="35" max="90" value="82"><span id="bottomv" class="val">82%</span></div>
+<div class="ctrl"><span>左</span><input id="left" type="range" min="0" max="25" value="7"><span id="leftv" class="val">7%</span></div>
+<div class="ctrl"><span>右</span><input id="right" type="range" min="70" max="100" value="95"><span id="rightv" class="val">95%</span></div>
+</div>
+<div id="cropLabel" class="note hidden" style="font-weight:800;margin-top:10px">👀 現在の読み取り範囲（スライダーを動かすと更新）</div><img id="crop" class="crop hidden">
+<div id="status" class="status"></div>
+<button id="read" class="primary" disabled>🔎 Sカードを読み取る</button>
+<div id="progressBox" class="controls" style="display:none;margin-top:10px">
+  <div style="font-weight:800">🔄 読み取り進捗</div>
+  <div id="progressText" class="status">準備中…</div>
+</div>
+<label style="display:block;margin-top:10px;font-size:13px"><input id="showCrop" type="checkbox" checked> 読み取り範囲を表示する</label>
+</section>
+<section class="card">
+<div class="title">🕐 読み取り結果（修正できます）</div>
+<div class="grid"><div class="head">日</div><div class="head">出勤</div><div class="head">退勤</div><div></div></div>
+<div id="rows"></div><button id="add" class="secondary" style="margin-top:10px">＋ 行を追加</button>
+</section>
+<section class="card">
+<div class="title">💰 計算結果</div>
+<div class="results"><div class="box"><div class="hint">合計勤務時間</div><div id="hours" class="num">0時間00分</div></div><div class="box pay"><div class="hint">給与</div><div id="pay" class="num">¥0</div></div></div>
+<div id="formula" class="hint">時給 × 合計勤務時間</div>
+</section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script>
+const STORE="s_card_v6";
+let people=JSON.parse(localStorage.getItem(STORE)||"null")||[{id:crypto.randomUUID(),name:"個人1",wage:0,rows:[]}],pid=people[0].id;
+const $=id=>document.getElementById(id),P=()=>people.find(p=>p.id===pid);
+function save(){localStorage.setItem(STORE,JSON.stringify(people))}
+function tabs(){let x=$("tabs");x.innerHTML="";people.forEach(p=>{let b=document.createElement("button");b.className="tab"+(p.id===pid?" active":"");b.textContent=p.name;b.onclick=()=>{pid=p.id;render()};x.appendChild(b)});let a=document.createElement("button");a.className="addtab";a.textContent="＋ 個人";a.onclick=()=>{let p={id:crypto.randomUUID(),name:"個人"+(people.length+1),wage:0,rows:[]};people.push(p);pid=p.id;save();render()};x.appendChild(a)}
+function addRow(day="",st="",en=""){let d=document.createElement("div");d.style.cssText="display:grid;grid-template-columns:45px 1fr 1fr 32px;gap:6px;margin-top:7px";d.innerHTML=`<input class="cell day" placeholder="3" value="${day}"><input class="cell st" placeholder="19:08" value="${st}"><input class="cell en" placeholder="23:07" value="${en}"><button class="del">×</button>`;d.querySelector(".del").onclick=()=>{d.remove();sync();calc()};d.querySelectorAll("input").forEach(e=>e.oninput=()=>{sync();calc()});$("rows").appendChild(d)}
+function draw(){let r=$("rows");r.innerHTML="";if(!P().rows.length){addRow();return}P().rows.forEach(x=>addRow(x.day,x.start,x.end))}
+function sync(){P().rows=[...$("rows").children].map(r=>({day:r.querySelector(".day").value,start:r.querySelector(".st").value,end:r.querySelector(".en").value}));save()}
+function norm(s){s=(s||"").replace(/[：.,]/g,":").replace(/\s/g,"").replace(/[Oo]/g,"0").replace(/[Il]/g,"1");let m=s.match(/(\d{1,2}):?(\d{2})/);if(!m)return null;let h=+m[1],mi=+m[2];if(h>23||mi>59)return null;return String(h).padStart(2,"0")+":"+String(mi).padStart(2,"0")}
+function mins(s){let [h,m]=s.split(":").map(Number);return h*60+m}
+function calc(){let total=0;P().rows.forEach(r=>{let a=norm(r.start),b=norm(r.end);if(a&&b){let x=mins(a),y=mins(b);if(y<x)y+=1440;total+=y-x}});$("hours").textContent=Math.floor(total/60)+"時間"+String(total%60).padStart(2,"0")+"分";let w=+P().wage||0,pay=Math.round(total*w/60);$("pay").textContent="¥"+pay.toLocaleString("ja-JP");$("formula").textContent=`${w.toLocaleString("ja-JP")}円 × ${(total/60).toFixed(2)}時間 = ¥${pay.toLocaleString("ja-JP")}`;save()}
+function render(){tabs();$("name").value=P().name;$("wage").value=P().wage||"";draw();calc()}
+$("name").oninput=()=>{P().name=$("name").value||"名前なし";save();tabs()};$("wage").oninput=calc;$("add").onclick=()=>{addRow();sync();calc()};
+
+let source=null,table=null;
+function makeCrop(){
+ const W=source.naturalWidth,H=source.naturalHeight;
+ const top=+$("top").value/100,bottom=+$("bottom").value/100,left=+$("left").value/100,right=+$("right").value/100;
+ const sx=Math.round(W*left),sy=Math.round(H*top),sw=Math.round(W*(right-left)),sh=Math.round(H*(bottom-top));
+ const c=document.createElement("canvas");c.width=Math.max(300,sw*3);c.height=Math.max(200,sh*3);
+ c.getContext("2d").drawImage(source,sx,sy,sw,sh,0,0,c.width,c.height);return c
+}
+function updateCrop(){if(!source)return;table=makeCrop();$("crop").src=table.toDataURL("image/jpeg",.92)}
+["top","bottom","left","right"].forEach(id=>$(id).oninput=()=>{$(id+"v").textContent=$(id).value+"%";updateCrop()});
+$("file").onchange=()=>{let f=$("file").files?.[0];if(!f)return;$("preview").src=URL.createObjectURL(f);$("preview").classList.remove("hidden");$("controls").classList.remove("hidden");$("read").disabled=false;source=new Image();source.src=$("preview").src;source.onload=()=>{updateCrop();$("crop").classList.remove("hidden");$("cropLabel").classList.remove("hidden")};$("status").textContent="写真を選択しました。まず範囲を確認してください。"};
+$("showCrop").onchange=e=>{$("crop").classList.toggle("hidden",!e.target.checked);$("cropLabel").classList.toggle("hidden",!e.target.checked)};
+
+function prep(c,thr){let o=document.createElement("canvas");o.width=c.width;o.height=c.height;let x=o.getContext("2d");x.drawImage(c,0,0);let d=x.getImageData(0,0,o.width,o.height),p=d.data;for(let i=0;i<p.length;i+=4){let g=.299*p[i]+.587*p[i+1]+.114*p[i+2];g=thr?(g<155?0:255):Math.max(0,Math.min(255,(g-105)*1.9+125));p[i]=p[i+1]=p[i+2]=g}x.putImageData(d,0,0);return o}
+function cleanTimeText(s){s=(s||"").replace(/[OoQ]/g,"0").replace(/[Il|]/g,"1").replace(/[Zz]/g,"2").replace(/[：.;,]/g,":").replace(/\s/g,"");const out=[];for(const m of s.matchAll(/(\d{1,2})\D?(\d{2})/g)){let h=+m[1],mi=+m[2];if(h<=29&&mi<=59){if(h>=24)h-=24;out.push(String(h).padStart(2,"0")+":"+String(mi).padStart(2,"0"));}}return out}
+function cleanDayText(s){s=(s||"").replace(/[OoQ]/g,"0").replace(/[Il|]/g,"1");const a=[];for(const m of s.matchAll(/(?:^|\D)([1-9]|[12]\d|3[01])(?:\D|$)/g))a.push(m[1]);return a}
+function rowCrop(c,y1,y2,scale=4){const q=document.createElement("canvas");q.width=Math.round(c.width*scale);q.height=Math.max(80,Math.round(c.height*(y2-y1)*scale));q.getContext("2d").drawImage(c,0,Math.round(c.height*y1),c.width,Math.round(c.height*(y2-y1)),0,0,q.width,q.height);return q}
+let worker=null;
+
+function setProgress(msg, cls=""){
+  $("progressBox").style.display="block";
+  $("progressText").className="status "+cls;
+  $("progressText").textContent=msg;
+  $("read").textContent="⏳ "+msg;
+}
+
+async function getWorker(){
+  if(worker)return worker;
+  if(!window.Tesseract)throw new Error("OCRエンジンが読み込まれていません。Wi‑Fi/モバイル通信を確認して、ページを再読み込みしてください。");
+  setProgress("OCRエンジンを起動しています…");
+  worker=await Tesseract.createWorker("eng",1,{
+    logger:m=>{
+      if(m.status){
+        const pct=m.progress?Math.round(m.progress*100):0;
+        const msg=`OCRエンジン：${m.status}${pct?" "+pct+"%":""}`;
+        $("status").textContent=msg;
+        $("progressText").textContent=msg;
+      }
+    }
+  });
+  await worker.setParameters({
+    tessedit_char_whitelist:"0123456789:",
+    tessedit_pageseg_mode:"7"
+  });
+  return worker;
+}
+
+function uniq(a){return [...new Set(a)]}
+
+async function recognizeWithTimeout(w, canvas, ms=25000){
+  return await Promise.race([
+    w.recognize(canvas),
+    new Promise((_,rej)=>setTimeout(()=>rej(new Error("OCRが25秒以内に完了しませんでした")),ms))
+  ]);
+}
+
+$("read").addEventListener("click", async (ev)=>{
+  ev.preventDefault();
+  ev.stopPropagation();
+
+  // ここはOCRより先に実行するので、必ず画面が変わる
+  $("read").disabled=true;
+  setProgress("読み取りを開始しました…");
+  $("status").textContent="写真を解析する準備をしています…";
+
+  try{
+    if(!source) throw new Error("先にタイムカード画像を選択してください。");
+    if(!source.complete || !source.naturalWidth) throw new Error("画像の読み込みが完了していません。もう一度画像を選択してください。");
+
+    table=makeCrop();
+    const w=await getWorker();
+
+    const out=[];
+    // 現在のSカード写真の6行位置
+    const centers=[.315,.405,.495,.675,.765,.865];
+    const half=.040;
+
+    for(let i=0;i<centers.length;i++){
+      setProgress(`${i+1}/6行目を読み取り中…`);
+      $("status").textContent=`${i+1}/6行目をOCR中…`;
+
+      const y1=Math.max(0,centers[i]-half);
+      const y2=Math.min(1,centers[i]+half);
+      const q=rowCrop(table,y1,y2,4);
+
+      const normal=prep(q,false);
+      const binary=prep(q,true);
+
+      const a=await recognizeWithTimeout(w,normal);
+      const b=await recognizeWithTimeout(w,binary);
+
+      const text=(a.data?.text||"")+" "+(b.data?.text||"");
+      const days=uniq(cleanDayText(text));
+      const times=uniq(cleanTimeText(text));
+
+      out.push({
+        day:days[0]||"",
+        start:times[0]||"",
+        end:times[1]||""
+      });
+    }
+
+    const useful=out.filter(x=>x.day||x.start||x.end);
+    if(!useful.length) throw new Error("数字を読み取れませんでした。読み取り範囲を表の6行に合わせてください。");
+
+    P().rows=useful;
+    save();
+    draw();
+    calc();
+
+    setProgress("読み取り完了！結果を確認してください。","ok");
+    $("status").innerHTML='<span class="ok">読み取り完了！下の「読み取り結果」を確認・修正してください。</span>';
+    $("read").textContent="🔎 もう一度読み取る";
+
+  }catch(e){
+    console.error(e);
+    setProgress("読み取りに失敗しました。","err");
+    $("status").innerHTML='<span class="err">エラー：'+String(e.message||e)+'</span>';
+    $("read").textContent="🔎 もう一度読み取る";
+  }finally{
+    $("read").disabled=false;
+  }
+});
+
+render();
